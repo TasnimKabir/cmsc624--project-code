@@ -1,0 +1,193 @@
+== bin/txn/lock_manager_test ==
+[ LockManagerA_SimpleLocking ] BEGIN
+[ LockManagerA_SimpleLocking ] PASS
+[ LockManagerA_LocksReleasedOutOfOrder ] BEGIN
+[ LockManagerA_LocksReleasedOutOfOrder ] PASS
+[ LockManagerB_SimpleLocking ] BEGIN
+[ LockManagerB_SimpleLocking ] PASS
+[ LockManagerB_LocksReleasedOutOfOrder ] BEGIN
+[ LockManagerB_LocksReleasedOutOfOrder ] PASS
+== bin/txn/txn_processor_test ==
+		--------------------------------------
+		    Average Transaction Duration
+		--------------------------------------
+		0.1ms		1ms		10ms
+		--------------------------------------
+		'Low contention' Read only (5 records)
+		--------------------------------------
+ Serial   	9421.88		993.591		99.8733
+ Locking A	44820.5		5022.08		500.315
+ Locking B	44038.7		4934.15		525.298
+ OCC      	42830.1		4946.64		485.526
+ OCC-P    	42708.1		5114.74		534.295
+ MVCC     	42000.8		5018.7		541.283
+
+		'Low contention' Read only (30 records)
+		---------------------------------------
+ Serial   	7536.38		966.559		99.5814
+ Locking A	18777.1		5013.76		613.897
+ Locking B	18653.5		5096.71		495.928
+ OCC      	32739.4		4997.99		504.901
+ OCC-P    	32233.2		4742.67		567.638
+ MVCC     	28813.8		5231.34		524.32
+
+		'High contention' Read only (5 records)
+		---------------------------------------
+ Serial   	9507.66		994.362		99.8836
+ Locking A	17799.5		2398.19		262.776
+ Locking B	43958		5240.65		562.546
+ OCC      	44236.2		4755.5		579.62
+ OCC-P    	43775		4920.17		561.531
+ MVCC     	43357.5		5216.38		548.426
+
+		'High contention' Read only (30 records)
+		----------------------------------------
+ Serial   	7727.06		970.418		99.6445
+ Locking A	5182.29		913.039		98.9764
+ Locking B	25187.6		5124.33		509.543
+ OCC      	34928.8		4910.68		516.997
+ OCC-P    	34023.6		4925.71		492.122
+ MVCC     	31099.1		5195.13		495.007
+
+		Low contention read-write (5 records)
+		-------------------------------------
+ Serial   	9107.14		989.237		99.8176
+ Locking A	43418.7		4844.55		552.542
+ Locking B	43995.1		5267.01		555
+ OCC      	41225.5		5342.4		557.647
+ OCC-P    	40325.9		5035.15		532.492
+ MVCC     	35576.1		4815.57		520.865
+
+		Low contention read-write (10 records)
+		--------------------------------------
+ Serial   	8385.02		979.904		99.7194
+ Locking A	37059.1		4994.64		538.971
+ Locking B	36496		5010.09		525.458
+ OCC      	39930.4		5129.13		522.658
+ OCC-P    	37304.3		4843.82		521.312
+ MVCC     	28913.1		4878.04		638.438
+
+		High contention read-write (5 records)
+		--------------------------------------
+ Serial   	9217.41		990.493		99.8523
+ Locking A	17504.2		2394.41		262.674
+ Locking B	17482.5		2383.3		247.729
+ OCC      	22085.4		2499.13		249.268
+ OCC-P    	23188.4		2776.87		268.541
+ MVCC     	16019.8		1756.48		204.266
+
+		High contention read-write (10 records)
+		---------------------------------------
+ Serial   	8691.3		984.509		99.7729
+ Locking A	7922.39		1252.51		140.132
+ Locking B	7996.3		1233.53		134.695
+ OCC      	10993.2		1280.53		133.815
+ OCC-P    	11213		1503.22		152.814
+ MVCC     	7496.3		1008.83		81.071
+
+		High contention mixed read only/read-write
+		------------------------------------------
+ Serial   	9510.23		1252.17		126.007
+ Locking A	5886.54		1132.5		124.26
+ Locking B	11278.2		2603.82		324.375
+ OCC      	21928.1		3110.16		279.502
+ OCC-P    	23362.2		3309.6		333.011
+ MVCC     	30435.3		5902.11		692.727
+
+
+2. Simulations are doomed to succeed. (4 points)
+
+Transaction durations are accomplished simply by forcing the thread executing each transaction to run in a busy loop for approximately the amount of time specified. This is supposed to simulate transaction logic --- e.g. the application might run some proprietary customer scoring function to estimate the total value of the customer after reading in the customer record from the database. Please list at least two weaknesses of this simulation --- i.e. give two reasons why the performance of the different concurrency control schemes you experimented with for this assignment would change relative to each other if we ran actual application code instead of just simulating it with a busy loop.
+
+Answer: 
+- Real workloads have variance in transaction length. Very long transactions can cause starvation in OCC, but not locking. The simulation prevented us from seeing this effect.
+- Real transactions consume system resources aside from just CPU. OCC aborts transactions during validation (after running). By failing to simulate the true resource consumption of a transaction, the simulation hides the increased cost of wasted resources by OCC relative to Locking. Moreover, the real-time actual application system may have other parallel processes running simultaneously. However, in the busy loop simulation, the CPU is prevented from doing any other work which may not be the case in real life database implementation.
+- The busy loop never considers extraneous factors that may affect the result. For example, a client may want to abort the transaction or there may be a disk failure that will wipe out all the memory that is saving the current state of the transaction. In actual application, every read or writes may not take the same time as disk read time varies.
+
+3.Locking manager (6 points)
+## Is deadlock possible in your locking implementation? Why or why not?
+
+Answer: 
+
+There is no deadlock since the lock table is in order. Therefore, deadlock is impossible since the lock manager solves the transactions one by one and there is no context switch since the lock manager is sequentially feeding transactions. If the previous transaction is executed, the blocked transactions will get a chance to execute eventually. When a transaction gets all the locks, they are added from lock_table to ready_txn_ queue. 
+
+For example, we have two transactions-- txn1 and txn2. They are coming in order. Even if txn1 and txn2 arrive at the same time, they are ordered in the txn_requests_, either txn1, txn2 or txn2, txn1. txn1 is requesting for A and B and Txn2 is requesting for B and A, The lock manager enqueues them in order. txn1 and txn2 will be ordered in advance --- (before execution) before requesting A or B. Then Txn1 will be granted the locks according to the implementation and Txn2 will put in the queue. In this case, let's consider Lock A solution:
+Lock manager only has one active thread which first receives txn1 and then txn2.
+LockTable(A): list (txn1, exclusive), (txn2, exclusive)
+LockTable(B): list (txn1, exclusive), (txn2, exclusive)
+txn1 will hold the lock, and execute the code. Then, txn1 releases the locks, and then txn2 will be put into the ready_txn_ queue since its wait number decreases to 0. When txn1 is starting to request A, it has already been removed from the lock_table_ to ready_txn_ queue -- they will never access the lock_table again. txn2 can run in parallel only when it does not conflict with txn1. Each time the lock manager only pops one transaction. If it's txn1, then the lock table will look like
+LockTable(A): list (txn1, exclusive)
+LockTable(B): list (txn1, exclusive)
+After that, the lock manager allows popping another transaction --- txn2.
+LockTable(A): list (txn1, exclusive), (txn2, exclusive)
+LockTable(B): list (txn1, exclusive), (txn2, exclusive)
+Therefore, there will never be a deadlock.
+
+## Most 2PL systems wait until they access data before they request a lock. But this implementation requests all locks before executing any transaction code. What is a performance-related disadvantage of our implementation in this assignment of requesting all locks in advance? What is a client-usability disadvantage of requesting all locks in advance?
+
+Answer: 
+
+Most 2PL systems wait until they access data before they request a lock. But this implementation requests all locks before executing any transaction code. We are giving a performance-related and client-usability disadvantage of our implementation in this assignment of requesting all locks in advance or explain the case when 2PL is better than Locking:
+- 2PL holds locks for a shorter period of time on average (just from when it needs to lock to the end of the transaction), whereas the locking implementations in this assignment hold locks for the entire transaction. When the contended data access always occurs at the end of the transaction 2PL should be better.
+- The client has the requirement to derive in advance all items that will be locked. In practice,  this means that the client needs someway to know in advance all items that it will need to access for the transaction, so that it can make all the needed lock requests at the beginning of the transaction. 
+
+However, there are cases when our implemented Locking B is better than 2PL such as:
+- If the contended access occurs towards the beginning of the transaction 2PL should be worse
+- Deadlock detection/resolution can be expensive. For any workload for which deadlock is common, 2PL will be much worse than the Locking.
+
+4. OCCam's Razor (4 points)
+
+## The OCC with serial validation is simpler than OCC with parallel validation.
+How did the two algorithms compare with each other in this simulation? Why do you think that is the case?
+How does this compare to the OCC paper that we read for class?
+What is the biggest reason for the difference between your results and the what you expected after reading the OCC paper?
+
+Answer: 
+
+I expected parallel-OCC to perform better than OCC in all the cases. However, in the simulation, the parallel OCC does not perform better than OCC in all the cases.
+
+In read-only and low contention read-write tests, OCC and parallel OCC perform almost similarly. However, in high contention read-write and mixed read-only/read-write cases, OCC with parallel validation performs better than OCC. Compared to OCC, OCC with parallel validation needs some unnecessary rollbacks. For read-only cases, there is no chance of conflicts and therefore, the parallel validation does not provide any benefit to the throughput result. However, in the case of read-write with high contention, OCC parallel validation serves some better results.
+
+One drawback of parallel validation is that it checks with every transaction in the active set for conflict. Therefore, an uncommitted transaction can rollback a transaction.
+
+In the OCC paper, parallel validation assumes the validation and write phase takes a non-trivial amount of time. Doing them in parallel is thus critical to getting good throughput. For our simulation, they are much shorter than the read phase, and therefore, the overhead of the extra code in validation is often not worth it. However, as transactions access more records, validation becomes more expensive, and therefore OCC-P gets better relative to OCC.
+
+5. OCC vs. Locking B  (7 points)
+
+## If your code is correct, you probably found that the relative performance of OCC and Locking B was different from the tradeoffs we discussed in class. In fact, you might be quite surprised by your results. Please describe the two biggest differences between the relative performance of OCC vs. Locking B relative to what we discussed in class, and explain why the theory doesn't match the practice for this codebase for each of these two surprises. 
+
+Answer: 
+
+OCC and Locking B were approximately the same performance for the 'high contention' read-only (5-records) test. But OCC beat Locking B for the 'high contention' read-only (30 records) test. In OCC, the transactions need not wait for the lock manager to acquire the locks. Therefore, it eliminates the locking overhead time. Therefore, in read-only cases, locking B performs less than OCC due to its overhead to acquire all locks. Each record in the transactions needs to acquire locks before starting the execution. The higher number of records takes higher locking time and therefore OCC performs significantly better when the number of records increases.
+
+Locking B loses to OCC for the high contention read-write test (both for 5 record transactions and 10 record transactions). However, the relative difference between OCC and Locking B gets very smaller and almost imperceptible for transactions longer than 0.1ms in the 'low contention' and 'high contention' read-write test. OCC has a higher performance when fewer conflicts are present in the transactions. OCC assumes the transaction to be a success and checks for serializability only at commit time. If it fails, it aborts the transactions. In high contention, the number of conflicts between transactions is high. Due to these many conflicts, OCC has to abort a lot of the transactions and restart them. These read-write conflicts incur a high abort rate in OCC and thus limit the throughput. As the transaction time increases, the number of finished transactions per second reduces. Therefore, the comparative distance between OCC and Locking B decreases. OCC has to run the transaction logic before the validation phase. Therefore if validation fails and the transaction needs to restart, then the transaction logic will need to run again next time. On the other hand, in all cases, Locking B only runs the transaction logic once all locks are obtained and the transaction is ready to execute safely. The overhead of re-running the transactions is a lot more pronounced when we have long-running transactions. Therefore, as the transaction time increases, the relative difference between OCC and Locking B gets shorter.
+
+5. MVCC vs. OCC/Locking (6 points)
+
+## For the read-write tests, MVCC performs worse than OCC and Locking. Why?
+## MVCC even sometimes does worse than serial. Why?
+## Yet for the mixed read-only/read-write experiment it performs the best, even though it wasn't the best for either read-only nor read-write. Why?
+
+Answer: 
+
+MVCC does not perform best in the case of read-only test cases. This happens because MVCC creates a new version during each read instead of reading the oldest version of the database. Therefore, MVCC creates its version for its database. For the creation of a version, it takes a little overhead. However, as it does not prevent concurrent reads, it performs significantly better compared to Locking A. Moreover, there is no locking required for concurrent reads here. Therefore, there is no locking overhead introduced in this case. That is why we can see MVCC performs similar to Locking B in read-only (30 records) cases. In OCC and parallel OCC, all data is read from the oldest version. Thus, no overhead of version creation is there. That is why MVCC has slightly less throughput than OCC and parallel OCC in read-only cases.
+
+In read-write test cases, the MVCC has less throughput than Locking, OCC and parallel OCC. Moreover, in high contention, the performance deteriorates and in read-write cases, it performs worse than serial transactions. As the number of conflicts increases, the MVCC's throughput decreases. MVCC always reads its version for the read operation. However, at the time of commit, it checks whether its write operations will be able to commit. In this phase, for high contention, most of the transaction rollback. This happens because most transactions read the same record in high contention and therefore, there are transactions Tj present which has read the data after Ti transaction's read. That is why Ti rolls back and the throughput decreases.
+
+However, for mixed read-only/read-write tests, MVCC performs the best. This happens because MVCC does not prevent a concurrent read of data, unlike the locking mechanism. Here, every transaction reads from the committed transaction instead of the original value of the database. Therefore, it performs best for read-based transactions with fewer conflicts.
+
+7. MVCC pseudocode (4 points)
+
+# Why did our MVCC pseudocode request read locks before each read?
+
+Answer: max_read_id gets updated on Read() and accessed on CheckWrite(). If we didn't request read locks the value of max_read_id when two reads happened at the same time would be non-deterministic. We need reads to follow a serial order.
+
+#In particular, what would happen if you didn't acquire these read locks?
+
+Answer: It would cause stale reads / violate serializability.
+
+#How long do these locks have to be held?
+
+Answer: MVCC utilizes the traditional locking mechanism but reduces lock contention to handle multi-user concurrency. MVCC locks acquired for reading never conflict with locks used for writing. Therefore, the read locks are released immediately after reading the data. In the implementation of MVCC, all read locks are released soon after the data is finished reading. In MVCC, every time a read happens, a new version is created. Therefore, we want to complete the version creation mechanism without interrupt. Therefore, locks are placed at the beginning of every read in MVCC.
+
+
