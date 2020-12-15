@@ -129,6 +129,8 @@ class TxnProcessor
     // Queue of completed (but not yet committed/aborted) transactions.
     AtomicQueue<Txn*> completed_txns_;
 
+    AtomicQueue<AtomicQueue> queuelist;
+
     // Queue of transaction results (already committed or aborted) to be returned
     // to client.
     AtomicQueue<Txn*> txn_results_;
