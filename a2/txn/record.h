@@ -22,13 +22,6 @@ enum TxnStatus
     ABORTED     = 4,  // Aborted
 };
 
-struct record
-{
-    uint64 Key;
-    uint64 parent;
-    uint64 child; 
-};
-
 class Txn
 {
    public:

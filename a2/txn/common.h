@@ -47,6 +47,8 @@ typedef uint64_t uint64;
 // Key and value types
 typedef uint64 Key;
 typedef uint64 Value;
+typedef uint64 Record;
+typedef map<Key,Value> Cluster;
 
 
 // Returns the number of seconds since midnight according to local system time,

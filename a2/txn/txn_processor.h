@@ -84,6 +84,7 @@ class TxnProcessor
     // Performs all reads required to execute the transaction, then executes the
     // transaction logic.
     void ExecuteTxn(Txn* txn);
+    void Union(Record* r1, Record* r2);
 
     // Applies all writes performed by '*txn' to 'storage_'.
     //

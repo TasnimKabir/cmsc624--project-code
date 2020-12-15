@@ -155,41 +155,43 @@ void TxnProcessor::RunLockingScheduler()
         {
             bool blocked = false;
             // Request read locks.
-            if (a%2==0){
-            for (set<Key>::iterator it = txn->readset_.begin(); it != txn->readset_.end(); ++it)
+            if (a%2==0)
             {
-                if (!lm_->ReadLock(txn, *it))
+                for (set<Key>::iterator it = txn->readset_.begin(); it != txn->readset_.end(); ++it)
                 {
-                    blocked = true;
+                    if (!lm_->ReadLock(txn, *it))
+                    {
+                        blocked = true;
+                    }
                 }
-            }
 
-            // Request write locks.
-            for (set<Key>::iterator it = txn->writeset_.begin(); it != txn->writeset_.end(); ++it)
-            {
-                if (!lm_->WriteLock(txn, *it))
+                // Request write locks.
+                for (set<Key>::iterator it = txn->writeset_.begin(); it != txn->writeset_.end(); ++it)
                 {
-                    blocked = true;
+                    if (!lm_->WriteLock(txn, *it))
+                    {
+                        blocked = true;
+                    }
                 }
             }
-          }
-          else{
-            for (set<Key>::iterator it = txn->writeset_.begin(); it != txn->writeset_.end(); ++it)
+            else
             {
-                if (!lm_->WriteLock(txn, *it))
+                for (set<Key>::iterator it = txn->writeset_.begin(); it != txn->writeset_.end(); ++it)
                 {
-                    blocked = true;
+                    if (!lm_->WriteLock(txn, *it))
+                    {
+                        blocked = true;
+                    }
                 }
-            }
-            for (set<Key>::iterator it = txn->readset_.begin(); it != txn->readset_.end(); ++it)
-            {
-                if (!lm_->ReadLock(txn, *it))
+                for (set<Key>::iterator it = txn->readset_.begin(); it != txn->readset_.end(); ++it)
                 {
-                    blocked = true;
+                    if (!lm_->ReadLock(txn, *it))
+                    {
+                        blocked = true;
+                    }
                 }
-            }
 
-          }
+            }
 
             // If all read and write locks were immediately acquired, this txn is
             // ready to be executed.
@@ -242,7 +244,10 @@ void TxnProcessor::RunLockingScheduler()
             ready_txns_.pop_front();
 
             // Start txn running in its own thread.
-            tp_.AddTask([this, txn]() { this->ExecuteTxn(txn); });
+            tp_.AddTask([this, txn]()
+            {
+                this->ExecuteTxn(txn);
+            });
         }
     }
 }
@@ -648,18 +653,197 @@ void TxnProcessor::RunMVCCScheduler()
     }
     //RunSerialScheduler();
 }
+
+bool TxnProcessor::Union(Record* r1, Record* r2)
+{
+    while (true)
+    {
+        Record* parent = Find(r1);
+        Record* child   = Find(r2);
+        if (parent  ==  child)
+        {
+            // do  nothing
+            return  true;
+        }
+        else if (parent  > M and  child  > M)
+        {
+            // both  are  special
+            return  false;
+        }
+        //  choose  parent , child
+        if (parent  < child)
+        {
+            Record* temp = parent;
+            parent = child;
+            child = temp;
+        }
+        //  invariant: parent  > child
+        // swap  parent  of  child
+        if (cas(&child ->parent, child, parent))     // LP1
+        {
+            return  true;
+        }
+    }
+}
+void TxnProcessor::AssignNew()
+{
+  p=−1;
+  q=−1;
+  Tnew=txn_requests_.Pop(&txn);
+  Tr=queuelist[0];
+  while(txn_requests_.Pop(&txn)){
+  if(M(Tnew,txn)> p){
+    p=M(Tnew,T);
+    q=queue(T);
+  }
+}
+  if (p==−1)
+  T.enqueue(Tnew);
+  else
+  Tr.enqueue(Tnew);
+
+}
+
+Record* TxnProcessor::Record* Find(Record* r)
+{
+    //  first  pass: record  path  and  find  root
+    Record* root = r;
+    while (root!= root ->parent)   // LP2 (when  false)
+    {
+        root = root ->parent;
+    }
+    //  second  pass: path  compression
+    CompressPath(r, root);
+    return  root;
+}
+void TxnProcessor::CompressPath(Record* rec, Record* root)
+{
+    while (rec < root)
+    {
+        Record* child = rec;
+        Record* parent = rec ->parent;
+        if (parent  < root)
+            cas(&child ->parent, parent, root);
+        rec = rec ->parent;
+    }
+}
+
 void TxnProcessor::RunStrife()
 {
-  Txn* txn;
-  while(!stopped_)
-  {
-      while(txn_requests_.Pop(&txn))
+    k=100;
+    set<Cluster> special;
+    int count[k][k];
+    for (int i=0;i<k;i++)
+    {
+      for (int j=0;j<k;j++)
       {
-          tp_.AddTask([this, txn]()
-          {
-              this->MVCCExecuteTxn(txn);
-          });
-
+        count[i][j]=0;
       }
-  }
+    }
+    // Spot Step (initially each data node is a cluster)
+    int i = 0;
+    Txn* txn;
+    while(!stopped_)
+    {
+        for (m=0; m<k; m++)
+        {
+            txn=txn_requests_.Pop(&txn);
+            r=T.nbrs;
+            set<Cluster> C = Find(r);
+            set<Cluster> S = special;
+            if(S.empty())
+            {
+                c = C.begin();
+                while (!C.empty()){
+                  others=C.begin();
+                  C.erase(others);
+                  Union(c, others);
+                }
+                c.id = i;
+                c.count++;
+                c.is_special = true;
+                special.insert(c);
+                i++;
+            }
+        }
+        // Fuse Step
+        while(txn_requests_.Pop(&txn)){
+        r=T.nbrs
+        set<Cluster> C = Find(r);
+        set<Cluster> S = special;
+        if (S.size()<=1){
+        c =S.size();
+        C.first=S.first;
+        while (!C.empty()){
+          others=C.begin();
+          C.erase(others);
+          Union(c, others);
+        }
+        c.count++;
+        else
+            while (!S.empty()){
+                t=S.begin();
+                c1=t.first();
+                c2=t.second();
+                count[c1.id][c2.id]++;
+              }
+        // Merge Step
+        while (!S.empty()){
+            t=S.begin();
+            c1=t.first();
+            c2=t.second();
+            n1= count[c1.id][c2.id];
+          }
+        n2=c1.count +c2.count +n1;
+        if (n1>=alpha*n2)
+        Union(c1,c2);
+        // Allocate Step
+        while(txn_requests_.Pop(&txn){
+        r=T.nbrs
+        set<Cluster> C = Find(r);
+        if(C.size()=1)
+              c = C.begin();
+        if(c.queue =0)
+               c.queue = new Queue<Txn>();
+        worklist.Push(c.queue);
+        c.queue.Push(T);
+        else
+            residuals.Push(T);
+        v.worklist=worklist;
+        v.residuals=residuals;
+        return v
+
+    }
+}
+}
+bool TxnProcessor::Union(Record* r1, Record* r2)
+{
+    while (true)
+    {
+        Record* parent = Find(r1);
+        Record* child   = Find(r2);
+        if (parent  ==  child)
+        {
+            // do  nothing
+            return  true;
+        }
+        else if (parent  > M and  child  > M)
+        {
+            // both  are  special
+            return  false;
+        }
+        //  choose  parent , child
+        if (parent  < child)
+        {
+            Record* temp = parent;
+            parent = child;
+            child = temp;
+        }
+        //  invariant: parent  > child
+        // swap  parent  of  child
+        if (cas(&child ->parent, child, parent))     // LP1
+        {
+            return  true;
+        }
+    }
 }
