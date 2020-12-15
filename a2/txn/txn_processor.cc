@@ -654,43 +654,12 @@ void TxnProcessor::RunMVCCScheduler()
     //RunSerialScheduler();
 }
 
-bool TxnProcessor::Union(Record* r1, Record* r2)
-{
-    while (true)
-    {
-        Record* parent = Find(r1);
-        Record* child   = Find(r2);
-        if (parent  ==  child)
-        {
-            // do  nothing
-            return  true;
-        }
-        else if (parent  > M and  child  > M)
-        {
-            // both  are  special
-            return  false;
-        }
-        //  choose  parent , child
-        if (parent  < child)
-        {
-            Record* temp = parent;
-            parent = child;
-            child = temp;
-        }
-        //  invariant: parent  > child
-        // swap  parent  of  child
-        if (cas(&child ->parent, child, parent))     // LP1
-        {
-            return  true;
-        }
-    }
-}
 void TxnProcessor::AssignNew()
 {
   p=−1;
   q=−1;
-  Tnew=txn_requests_.Pop(&txn);
-  Tr=queuelist[0];
+  Tnew=txn_requests_.front();
+  Tr=queuelist.front();
   while(txn_requests_.Pop(&txn)){
   if(M(Tnew,txn)> p){
     p=M(Tnew,T);
